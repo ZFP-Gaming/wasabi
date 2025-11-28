@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import {
   CheckCircle,
-  Compass,
   Headphones,
   MagnifyingGlass,
   MusicNotesSimple,
@@ -15,6 +14,8 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState("");
   const [localError, setLocalError] = useState("");
+   const [showSuggestions, setShowSuggestions] = useState(false);
+   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef(null);
 
@@ -43,6 +44,8 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
       .slice(0, 12);
   }, [orderedFiles, query]);
 
+  const suggestions = filtered;
+
   const selectSound = (name) => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -52,6 +55,8 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
     setSelected(name);
     setQuery(displayName(name));
     setLocalError("");
+    setShowSuggestions(false);
+    setHighlightedIndex(-1);
   };
 
   const handleSubmit = async (event) => {
@@ -82,49 +87,90 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
     audio.play();
   };
 
+  const handleKeyDown = (event) => {
+    if (!suggestions.length) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setShowSuggestions(true);
+      setHighlightedIndex((prev) => (prev + 1) % suggestions.length);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setShowSuggestions(true);
+      setHighlightedIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+    } else if (event.key === "Enter" && highlightedIndex >= 0) {
+      event.preventDefault();
+      const picked = suggestions[highlightedIndex];
+      selectSound(picked.name);
+    } else if (event.key === "Escape") {
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+    }
+  };
+
   return (
     <div className="panel">
       <div className="panel-header">
         <div>
           <h2>Configurar mi intro</h2>
-          <p className="muted">
-            Busca entre los sonidos existentes y envía tu selección para que quede registrada.
-          </p>
         </div>
-        <span className="pill subtle">
-          <Compass size={16} weight="bold" />
-          Paso único
-        </span>
       </div>
 
       <form className="intro-form" onSubmit={handleSubmit}>
         <label className="field">
           <span>Elige un sonido de la carpeta uploads</span>
-          <div className="input-shell">
-            <MagnifyingGlass size={18} weight="bold" className="muted" />
-            <input
-              type="text"
-              placeholder="escribe para filtrar..."
-              list="sound-options"
-              value={query}
-              onChange={(e) => {
-                const value = e.target.value;
-                setQuery(value);
-                setLocalError("");
-                const match = resolveSelectionFromQuery(value);
-                if (match) {
-                  setSelected(match);
-                }
-              }}
-              disabled={busy || loading}
-            />
-            {selected && <CheckCircle size={16} weight="fill" className="input-shell__status" />}
+          <div className="autocomplete">
+            <div className="input-shell">
+              <MagnifyingGlass size={18} weight="bold" className="muted" />
+              <input
+                type="text"
+                placeholder="escribe para filtrar..."
+                value={query}
+                onFocus={() => setShowSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 120)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setQuery(value);
+                  setLocalError("");
+                  setShowSuggestions(true);
+                  setHighlightedIndex(-1);
+                  const match = resolveSelectionFromQuery(value);
+                  if (match) {
+                    setSelected(match);
+                  } else {
+                    setSelected("");
+                  }
+                }}
+                onKeyDown={handleKeyDown}
+                disabled={busy || loading}
+              />
+              {selected && (
+                <CheckCircle size={16} weight="fill" className="input-shell__status" />
+              )}
+            </div>
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="autocomplete__list">
+                {suggestions.map((file, index) => {
+                  const isHighlighted = index === highlightedIndex;
+                  return (
+                    <button
+                      key={file.name}
+                      type="button"
+                      className={`autocomplete__item ${isHighlighted ? "is-highlighted" : ""}`}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectSound(file.name)}
+                    >
+                      <span className="autocomplete__name" title={file.name}>
+                        {displayName(file.name)}
+                      </span>
+                      <span className="autocomplete__meta">
+                        Editado {new Date(file.modified).toLocaleDateString("es-ES")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          <datalist id="sound-options">
-            {orderedFiles.map((file) => (
-              <option key={file.name} value={displayName(file.name)} />
-            ))}
-          </datalist>
         </label>
 
         <div className="sound-grid">
@@ -189,7 +235,7 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
         {localError && <p className="muted error">{localError}</p>}
 
         <button type="submit" className="primary" disabled={busy || loading}>
-          Enviar solicitud de intro
+          Guardar
         </button>
       </form>
     </div>

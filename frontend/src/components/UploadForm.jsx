@@ -201,7 +201,7 @@ function UploadForm({ onSubmit, busy }) {
         ) : (
           <>
             <UploadSimple size={18} weight="bold" />
-            Subir archivo recortado
+            Subir
           </>
         )}
       </button>
