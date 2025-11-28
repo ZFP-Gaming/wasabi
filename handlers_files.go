@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -21,6 +23,13 @@ type fileEntry struct {
 
 type renameRequest struct {
 	NewName string `json:"newName"`
+}
+
+var allowedUploadExts = map[string]bool{
+	".mp3": true,
+	".ogg": true,
+	".wav": true,
+	".m4a": true,
 }
 
 func (s *server) uploadHandler(w http.ResponseWriter, r *http.Request) {
@@ -46,33 +55,51 @@ func (s *server) uploadHandler(w http.ResponseWriter, r *http.Request) {
 		fileName = custom
 	}
 
+	originalExt := strings.ToLower(filepath.Ext(header.Filename))
+	if originalExt == "" {
+		originalExt = strings.ToLower(filepath.Ext(fileName))
+	}
+	if !allowedUploadExts[originalExt] {
+		http.Error(w, "formato no soportado, usa mp3, ogg, wav o m4a", http.StatusBadRequest)
+		return
+	}
+
 	safeName, err := sanitizeName(fileName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	dstPath := filepath.Join(s.uploadDir, safeName)
+	finalName := ensureMP3Name(safeName)
+	dstPath := filepath.Join(s.uploadDir, finalName)
 	if _, err := os.Stat(dstPath); err == nil {
 		http.Error(w, "ya existe un archivo con ese nombre", http.StatusConflict)
 		return
 	}
 
-	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
-	if err != nil {
-		log.Printf("error al abrir destino: %v", err)
-		http.Error(w, "no se pudo guardar el archivo", http.StatusInternalServerError)
-		return
-	}
-	defer dst.Close()
+	if originalExt == ".mp3" {
+		dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o644)
+		if err != nil {
+			log.Printf("error al abrir destino: %v", err)
+			http.Error(w, "no se pudo guardar el archivo", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
 
-	if _, err := io.Copy(dst, file); err != nil {
-		log.Printf("error al copiar archivo: %v", err)
-		http.Error(w, "no se pudo escribir el archivo", http.StatusInternalServerError)
-		return
+		if _, err := io.Copy(dst, file); err != nil {
+			log.Printf("error al copiar archivo: %v", err)
+			http.Error(w, "no se pudo escribir el archivo", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := s.convertAndSaveAsMP3(file, originalExt, dstPath); err != nil {
+			log.Printf("error al convertir a mp3: %v", err)
+			http.Error(w, "no se pudo convertir el archivo a mp3", http.StatusInternalServerError)
+			return
+		}
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]string{"message": "archivo subido", "name": safeName})
+	writeJSON(w, http.StatusCreated, map[string]string{"message": "archivo subido", "name": finalName})
 }
 
 func (s *server) listHandler(w http.ResponseWriter, r *http.Request) {
@@ -222,6 +249,44 @@ func (s *server) renameFile(w http.ResponseWriter, r *http.Request, currentName 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "archivo renombrado", "name": newName})
 }
 
+func (s *server) convertAndSaveAsMP3(src io.Reader, sourceExt, dstPath string) error {
+	tmpIn, err := os.CreateTemp("", "upload-*"+sourceExt)
+	if err != nil {
+		return fmt.Errorf("no se pudo preparar el archivo temporal: %w", err)
+	}
+	defer os.Remove(tmpIn.Name())
+
+	if _, err := io.Copy(tmpIn, src); err != nil {
+		tmpIn.Close()
+		return fmt.Errorf("no se pudo guardar el archivo temporal: %w", err)
+	}
+	if err := tmpIn.Close(); err != nil {
+		return fmt.Errorf("no se pudo cerrar el archivo temporal: %w", err)
+	}
+
+	tmpOut, err := os.CreateTemp(s.uploadDir, ".tmp-convert-*.mp3")
+	if err != nil {
+		return fmt.Errorf("no se pudo preparar el destino temporal: %w", err)
+	}
+	tmpOutPath := tmpOut.Name()
+	tmpOut.Close()
+	defer os.Remove(tmpOutPath)
+
+	if err := convertToMP3(tmpIn.Name(), tmpOutPath); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpOutPath, dstPath); err != nil {
+		return fmt.Errorf("no se pudo mover el mp3 convertido: %w", err)
+	}
+
+	if err := os.Chmod(dstPath, 0o644); err != nil {
+		return fmt.Errorf("no se pudieron ajustar permisos: %w", err)
+	}
+
+	return nil
+}
+
 func sanitizeName(name string) (string, error) {
 	name = filepath.Base(strings.TrimSpace(name))
 	if name == "." || name == "" {
@@ -231,6 +296,29 @@ func sanitizeName(name string) (string, error) {
 		return "", fmt.Errorf("nombre de archivo inválido")
 	}
 	return name, nil
+}
+
+func ensureMP3Name(name string) string {
+	base := strings.TrimSuffix(name, filepath.Ext(name))
+	if base == "" {
+		base = name
+	}
+	if base == "" {
+		base = "audio"
+	}
+	return base + ".mp3"
+}
+
+func convertToMP3(inputPath, outputPath string) error {
+	var stderr bytes.Buffer
+	cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, "-vn", "-codec:a", "libmp3lame", "-qscale:a", "2", outputPath)
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ffmpeg no pudo convertir el archivo: %v: %s", err, stderr.String())
+	}
+
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
