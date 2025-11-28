@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,12 @@ import (
 	"time"
 )
 
-const uploadDir = "uploads"
+var uploadDir = "uploads"
+
+type config struct {
+	addr      string
+	uploadDir string
+}
 
 type fileEntry struct {
 	Name     string `json:"name"`
@@ -26,6 +32,13 @@ type renameRequest struct {
 }
 
 func main() {
+	if err := loadDotEnv(".env"); err != nil {
+		log.Fatalf("no se pudo cargar .env: %v", err)
+	}
+
+	cfg := readConfig()
+	uploadDir = cfg.uploadDir
+
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("no se pudo crear la carpeta de subida: %v", err)
 	}
@@ -35,11 +48,74 @@ func main() {
 	mux.HandleFunc("/files", listHandler)
 	mux.HandleFunc("/files/", renameHandler)
 
-	addr := ":8080"
-	log.Printf("servidor escuchando en %s, carpeta de subidas: %s", addr, uploadDir)
-	if err := http.ListenAndServe(addr, logRequest(mux)); err != nil {
+	log.Printf("servidor escuchando en %s, carpeta de subidas: %s", cfg.addr, uploadDir)
+	if err := http.ListenAndServe(cfg.addr, logRequest(mux)); err != nil {
 		log.Fatalf("servidor detenido: %v", err)
 	}
+}
+
+func readConfig() config {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = "8080"
+	}
+	addr := port
+	if !strings.Contains(addr, ":") {
+		addr = ":" + addr
+	}
+
+	upload := strings.TrimSpace(os.Getenv("UPLOAD_DIR"))
+	if upload == "" {
+		upload = "uploads"
+	}
+
+	return config{
+		addr:      addr,
+		uploadDir: upload,
+	}
+}
+
+func loadDotEnv(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("no se pudo abrir %s: %w", path, err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	line := 0
+	for scanner.Scan() {
+		line++
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		key, val, ok := strings.Cut(text, "=")
+		if !ok {
+			return fmt.Errorf("linea %d invalida en %s", line, path)
+		}
+		key = strings.TrimSpace(key)
+		if key == "" {
+			return fmt.Errorf("linea %d sin clave en %s", line, path)
+		}
+		val = strings.TrimSpace(val)
+		if n := len(val); n >= 2 && ((val[0] == '"' && val[n-1] == '"') || (val[0] == '\'' && val[n-1] == '\'')) {
+			val = val[1 : n-1]
+		}
+		if _, exists := os.LookupEnv(key); exists {
+			continue
+		}
+		if err := os.Setenv(key, val); err != nil {
+			return fmt.Errorf("no se pudo definir %s: %w", key, err)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error leyendo %s: %w", path, err)
+	}
+	return nil
 }
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {

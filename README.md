@@ -2,8 +2,11 @@ API sencilla en Go para subir y gestionar archivos de audio en una carpeta local
 
 ## Cómo ejecutar
 - Requiere Go 1.20+.
+- Variables configurables (via entorno o `.env`):
+  - `PORT`: puerto/addr de escucha (por defecto `8080`, se puede usar `:8080` o `127.0.0.1:8080`).
+  - `UPLOAD_DIR`: carpeta donde se guardan los archivos (por defecto `uploads`).
 - Ejecuta el servidor: `go run ./...`
-- Escucha en `http://localhost:8080`.
+- Escucha en `http://localhost:8080` si no cambias `PORT`.
 
 ## Endpoints
 - `POST /upload` (multipart/form-data)
