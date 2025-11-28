@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { ArrowClockwise } from "phosphor-react";
 import FileList from "./components/FileList.jsx";
 import UploadForm from "./components/UploadForm.jsx";
-import { fetchFiles, renameFile, uploadFile } from "./services/api.js";
+import { deleteFile, fetchFiles, renameFile, uploadFile } from "./services/api.js";
 
 function App() {
   const [files, setFiles] = useState([]);
@@ -57,6 +58,21 @@ function App() {
     }
   };
 
+  const handleDelete = async (name) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await deleteFile(name);
+      setNotice(`Archivo eliminado: ${res.name}`);
+      await loadFiles();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="page">
       <header className="hero">
@@ -89,6 +105,7 @@ function App() {
             </p>
           </div>
           <button className="ghost" onClick={loadFiles} disabled={loading}>
+            <ArrowClockwise size={18} weight="bold" />
             Recargar lista
           </button>
         </div>
@@ -116,6 +133,7 @@ function App() {
           files={files}
           loading={loading}
           onRename={handleRename}
+          onDelete={handleDelete}
           disabled={busy}
         />
       </section>

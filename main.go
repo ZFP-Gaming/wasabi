@@ -46,7 +46,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload", uploadHandler)
 	mux.HandleFunc("/files", listHandler)
-	mux.HandleFunc("/files/", renameHandler)
+	mux.HandleFunc("/files/", fileHandler)
 
 	log.Printf("servidor escuchando en %s, carpeta de subidas: %s", cfg.addr, uploadDir)
 	if err := http.ListenAndServe(cfg.addr, logRequest(mux)); err != nil {
@@ -203,13 +203,26 @@ func listHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, files)
 }
 
-func renameHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPut {
-		http.Error(w, "solo se permite PUT", http.StatusMethodNotAllowed)
-		return
+func sanitizeName(name string) (string, error) {
+	name = filepath.Base(strings.TrimSpace(name))
+	if name == "." || name == "" {
+		return "", fmt.Errorf("nombre de archivo requerido")
 	}
+	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
+		return "", fmt.Errorf("nombre de archivo inválido")
+	}
+	return name, nil
+}
 
-	// expected path: /files/{nombre}
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("error al serializar respuesta: %v", err)
+	}
+}
+
+func fileHandler(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimPrefix(r.URL.Path, "/files/")
 	if name == "" || strings.Contains(name, "/") {
 		http.Error(w, "ruta inválida", http.StatusBadRequest)
@@ -222,6 +235,69 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	switch r.Method {
+	case http.MethodGet:
+		serveFile(w, r, currentName)
+	case http.MethodDelete:
+		deleteFile(w, r, currentName)
+	case http.MethodPut:
+		renameFile(w, r, currentName)
+	default:
+		http.Error(w, "método no permitido", http.StatusMethodNotAllowed)
+	}
+}
+
+func serveFile(w http.ResponseWriter, r *http.Request, name string) {
+	path := filepath.Join(uploadDir, name)
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		http.Error(w, "archivo no encontrado", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Printf("error al acceder a archivo: %v", err)
+		http.Error(w, "no se pudo abrir el archivo", http.StatusInternalServerError)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "nombre inválido", http.StatusBadRequest)
+		return
+	}
+
+	http.ServeFile(w, r, path)
+}
+
+func deleteFile(w http.ResponseWriter, r *http.Request, name string) {
+	path := filepath.Join(uploadDir, name)
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		http.Error(w, "archivo no encontrado", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Printf("error al acceder a archivo: %v", err)
+		http.Error(w, "no se pudo eliminar el archivo", http.StatusInternalServerError)
+		return
+	}
+	if info.IsDir() {
+		http.Error(w, "nombre inválido", http.StatusBadRequest)
+		return
+	}
+
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "archivo no encontrado", http.StatusNotFound)
+			return
+		}
+		log.Printf("error al eliminar archivo: %v", err)
+		http.Error(w, "no se pudo eliminar el archivo", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "archivo eliminado", "name": name})
+}
+
+func renameFile(w http.ResponseWriter, r *http.Request, currentName string) {
 	var payload renameRequest
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "cuerpo JSON inválido", http.StatusBadRequest)
@@ -231,6 +307,11 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 	newName, err := sanitizeName(payload.NewName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if newName == currentName {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "archivo sin cambios", "name": newName})
 		return
 	}
 
@@ -253,25 +334,6 @@ func renameHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"message": "archivo renombrado", "name": newName})
-}
-
-func sanitizeName(name string) (string, error) {
-	name = filepath.Base(strings.TrimSpace(name))
-	if name == "." || name == "" {
-		return "", fmt.Errorf("nombre de archivo requerido")
-	}
-	if strings.Contains(name, "..") || strings.ContainsAny(name, `/\`) {
-		return "", fmt.Errorf("nombre de archivo inválido")
-	}
-	return name, nil
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Printf("error al serializar respuesta: %v", err)
-	}
 }
 
 func logRequest(next http.Handler) http.Handler {

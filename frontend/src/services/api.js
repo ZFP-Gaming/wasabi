@@ -23,6 +23,10 @@ export async function fetchFiles() {
   return Array.isArray(payload) ? payload : [];
 }
 
+export function fileUrl(name) {
+  return `${API_BASE}/files/${encodeURIComponent(name)}`;
+}
+
 export async function uploadFile(formData) {
   const response = await fetch(`${API_BASE}/upload`, {
     method: "POST",
@@ -38,6 +42,13 @@ export async function renameFile(currentName, newName) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ newName }),
+  });
+  return handleResponse(response);
+}
+
+export async function deleteFile(name) {
+  const response = await fetch(`${API_BASE}/files/${encodeURIComponent(name)}`, {
+    method: "DELETE",
   });
   return handleResponse(response);
 }

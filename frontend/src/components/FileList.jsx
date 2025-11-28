@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { Clock, FileAudio, NotePencil, Trash, WaveSine } from "phosphor-react";
+import { fileUrl } from "../services/api.js";
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
@@ -21,10 +23,11 @@ function formatDate(dateString) {
   });
 }
 
-function FileCard({ file, onRename, disabled }) {
+function FileCard({ file, onRename, onDelete, disabled }) {
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState(file.name);
   const [localError, setLocalError] = useState("");
+  const audioSource = useMemo(() => fileUrl(file.name), [file.name]);
 
   const handleRename = async (event) => {
     event.preventDefault();
@@ -41,23 +44,46 @@ function FileCard({ file, onRename, disabled }) {
     setEditing(false);
   };
 
+  const handleDelete = async () => {
+    if (disabled) return;
+    const confirmed = window.confirm(`¿Eliminar ${file.name}?`);
+    if (!confirmed) return;
+    await onDelete(file.name);
+  };
+
   return (
     <article className="file-card">
       <div className="file-header">
-        <div>
-          <p className="file-name">{file.name}</p>
-          <p className="muted">
-            {formatSize(file.size)} · {formatDate(file.modified)}
-          </p>
+        <div className="file-id">
+          <div className="file-avatar">
+            <FileAudio size={22} weight="fill" />
+          </div>
+          <div>
+            <p className="file-name">{file.name}</p>
+            <div className="file-meta">
+              <span className="pill subtle compact">
+                <Clock size={14} weight="bold" />
+                {formatDate(file.modified)}
+              </span>
+              <span className="pill subtle compact">{formatSize(file.size)}</span>
+            </div>
+          </div>
         </div>
         {!editing ? (
-          <button
-            className="ghost"
-            onClick={() => setEditing(true)}
-            disabled={disabled}
-          >
-            Renombrar
-          </button>
+          <div className="chip-actions">
+            <button
+              className="ghost"
+              onClick={() => setEditing(true)}
+              disabled={disabled}
+            >
+              <NotePencil size={16} weight="bold" />
+              Renombrar
+            </button>
+            <button className="ghost danger" onClick={handleDelete} disabled={disabled}>
+              <Trash size={16} weight="bold" />
+              Eliminar
+            </button>
+          </div>
         ) : (
           <button
             className="ghost"
@@ -92,11 +118,29 @@ function FileCard({ file, onRename, disabled }) {
           </div>
         </form>
       )}
+
+      <div className="player-shell">
+        <div className="player-shell__head">
+          <div className="player-label">
+            <WaveSine size={16} weight="bold" />
+            <span>Reproductor</span>
+          </div>
+        </div>
+        <audio
+          className="audio-player"
+          controls
+          preload="metadata"
+          src={audioSource}
+          controlsList="nodownload"
+        >
+          Tu navegador no soporta reproducción de audio.
+        </audio>
+      </div>
     </article>
   );
 }
 
-function FileList({ files, loading, onRename, disabled }) {
+function FileList({ files, loading, onRename, onDelete, disabled }) {
   const orderedFiles = useMemo(
     () =>
       [...files].sort(
@@ -126,6 +170,7 @@ function FileList({ files, loading, onRename, disabled }) {
           key={file.name}
           file={file}
           onRename={onRename}
+          onDelete={onDelete}
           disabled={disabled}
         />
       ))}
