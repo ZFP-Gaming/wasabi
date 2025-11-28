@@ -99,19 +99,9 @@ function App() {
       <header className="hero">
         <div>
           <p className="eyebrow">Wasabi · gestor de audio</p>
-          <h1>Sube, lista y renombra tus audios sin complicaciones.</h1>
-          <p className="lede">
-            La API en Go ya está corriendo en el puerto 8080. Este cliente en
-            React consume los endpoints <code>/upload</code> y{" "}
-            <code>/files</code> vía proxy para evitar CORS.
-          </p>
         </div>
         <div className="hero-actions">
           <UserProfile />
-          <div className="pill">
-            <span className="dot" />
-            API en vivo · 8080
-          </div>
         </div>
       </header>
 
