@@ -12,7 +12,11 @@ func main() {
 		log.Fatalf("configuración inválida: %v", err)
 	}
 
-	server := newServer(cfg)
+	server, err := newServer(cfg)
+	if err != nil {
+		log.Fatalf("no se pudo inicializar el servidor: %v", err)
+	}
+
 	if err := server.ensureUploadDir(); err != nil {
 		log.Fatalf("no se pudo crear la carpeta de subida: %v", err)
 	}

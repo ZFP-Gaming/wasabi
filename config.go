@@ -13,6 +13,7 @@ type appConfig struct {
 	UploadDir      string
 	FrontendOrigin string
 	Auth           authConfig
+	Mongo          mongoConfig
 }
 
 type authConfig struct {
@@ -20,6 +21,12 @@ type authConfig struct {
 	ClientSecret string
 	RedirectURI  string
 	JWTSecret    string
+}
+
+type mongoConfig struct {
+	URI        string
+	Database   string
+	Collection string
 }
 
 func loadAppConfig() (appConfig, error) {
@@ -47,11 +54,17 @@ func loadAppConfig() (appConfig, error) {
 		return appConfig{}, err
 	}
 
+	mongoCfg, err := readMongoConfig()
+	if err != nil {
+		return appConfig{}, err
+	}
+
 	return appConfig{
 		Addr:           addr,
 		UploadDir:      upload,
 		FrontendOrigin: frontend,
 		Auth:           authCfg,
+		Mongo:          mongoCfg,
 	}, nil
 }
 
@@ -79,6 +92,29 @@ func readAuthConfig() (authConfig, error) {
 		ClientSecret: clientSecret,
 		RedirectURI:  redirectURI,
 		JWTSecret:    secret,
+	}, nil
+}
+
+func readMongoConfig() (mongoConfig, error) {
+	uri := strings.TrimSpace(os.Getenv("MONGO_URL"))
+	if uri == "" {
+		return mongoConfig{}, fmt.Errorf("MONGO_URL es requerido")
+	}
+
+	db := strings.TrimSpace(os.Getenv("MONGO_DB"))
+	if db == "" {
+		db = "bot"
+	}
+
+	collection := strings.TrimSpace(os.Getenv("MONGO_COLLECTION"))
+	if collection == "" {
+		collection = "intros"
+	}
+
+	return mongoConfig{
+		URI:        uri,
+		Database:   db,
+		Collection: collection,
 	}, nil
 }
 

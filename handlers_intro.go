@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type introRequest struct {
@@ -53,9 +59,30 @@ func (s *server) introHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("solicitud de intro recibida: user_id=%s sound=%s", claims.UserID, soundName)
+	effect := strings.TrimSuffix(soundName, filepath.Ext(soundName))
+	if effect == "" {
+		effect = soundName
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	_, err = s.introsCollection.UpdateOne(
+		ctx,
+		bson.M{"id": claims.UserID},
+		bson.M{"$set": bson.M{"effect": effect}},
+		options.Update().SetUpsert(true),
+	)
+	if err != nil {
+		log.Printf("error al guardar intro en mongo: %v", err)
+		http.Error(w, "no se pudo guardar la intro", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("solicitud de intro registrada: user_id=%s sound=%s effect=%s", claims.UserID, soundName, effect)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message":   "solicitud de intro registrada",
 		"soundName": soundName,
+		"effect":    effect,
 	})
 }

@@ -1,23 +1,45 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type server struct {
-	uploadDir      string
-	auth           *authService
-	frontendOrigin string
+	uploadDir        string
+	auth             *authService
+	frontendOrigin   string
+	mongoClient      *mongo.Client
+	introsCollection *mongo.Collection
 }
 
-func newServer(cfg appConfig) *server {
-	return &server{
-		uploadDir:      cfg.UploadDir,
-		auth:           newAuthService(cfg.Auth),
-		frontendOrigin: cfg.FrontendOrigin,
+func newServer(cfg appConfig) (*server, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.Mongo.URI))
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo crear cliente de mongo: %w", err)
 	}
+
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, fmt.Errorf("no se pudo conectar a mongo: %w", err)
+	}
+
+	return &server{
+		uploadDir:        cfg.UploadDir,
+		auth:             newAuthService(cfg.Auth),
+		frontendOrigin:   cfg.FrontendOrigin,
+		mongoClient:      client,
+		introsCollection: client.Database(cfg.Mongo.Database).Collection(cfg.Mongo.Collection),
+	}, nil
 }
 
 func (s *server) ensureUploadDir() error {
