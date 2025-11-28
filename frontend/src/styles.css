@@ -235,6 +235,9 @@ h1 {
 .file-drop__title {
   margin: 0 0 4px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-drop__copy .tiny {
@@ -302,6 +305,12 @@ h1 {
 
 .input-shell__status {
   color: var(--accent);
+}
+
+.input-shell.search {
+  max-width: 460px;
+  min-width: 240px;
+  width: 100%;
 }
 
 input[type="text"],
@@ -385,6 +394,15 @@ button.primary {
   margin-top: 16px;
 }
 
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
 .pagination {
   margin-top: 14px;
   display: flex;
@@ -442,6 +460,13 @@ button.primary {
   min-width: 0;
 }
 
+.sound-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .sound-chip.is-active {
   border-color: rgba(101, 243, 197, 0.5);
   background: linear-gradient(135deg, rgba(101, 243, 197, 0.15), rgba(255, 255, 255, 0.06));
@@ -477,6 +502,13 @@ button.primary {
   min-width: 0;
 }
 
+.file-name-line {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
 .file-id {
   display: flex;
   gap: 10px;
@@ -499,6 +531,7 @@ button.primary {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .file-meta {
@@ -618,6 +651,16 @@ button.primary {
 
 .player-shell.single-line {
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.player-shell.single-line .player-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-shell.single-line .player-meta.horizontal {
+  width: 100%;
 }
 
 .player-shell.micro {
@@ -635,6 +678,12 @@ button.primary {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+}
+
+.player-meta .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-meta.horizontal.micro {

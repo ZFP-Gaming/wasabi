@@ -9,6 +9,7 @@ import {
   PlayCircle,
 } from "phosphor-react";
 import { fileUrl } from "../services/api.js";
+import { displayName } from "../utils/fileNames.js";
 
 function IntroConfigurator({ files, loading, busy, onSubmit }) {
   const [query, setQuery] = useState("");
@@ -25,10 +26,21 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
     [files],
   );
 
+  const resolveSelectionFromQuery = (value) => {
+    const term = value.trim().toLowerCase();
+    if (!term) return "";
+    return (
+      orderedFiles.find((file) => displayName(file.name).toLowerCase() === term)?.name ||
+      ""
+    );
+  };
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
     if (!term) return orderedFiles.slice(0, 8);
-    return orderedFiles.filter((file) => file.name.toLowerCase().includes(term)).slice(0, 12);
+    return orderedFiles
+      .filter((file) => displayName(file.name).toLowerCase().includes(term))
+      .slice(0, 12);
   }, [orderedFiles, query]);
 
   const selectSound = (name) => {
@@ -38,13 +50,14 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
       setPlaying(false);
     }
     setSelected(name);
-    setQuery(name);
+    setQuery(displayName(name));
     setLocalError("");
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const trimmed = selected.trim();
+    const existingName = selected || resolveSelectionFromQuery(query);
+    const trimmed = existingName.trim();
     if (!trimmed) {
       setLocalError("Elige un sonido válido de la lista.");
       return;
@@ -95,17 +108,21 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
               list="sound-options"
               value={query}
               onChange={(e) => {
-                setQuery(e.target.value);
+                const value = e.target.value;
+                setQuery(value);
                 setLocalError("");
+                const match = resolveSelectionFromQuery(value);
+                if (match) {
+                  setSelected(match);
+                }
               }}
-              onBlur={(e) => setSelected(e.target.value)}
               disabled={busy || loading}
             />
             {selected && <CheckCircle size={16} weight="fill" className="input-shell__status" />}
           </div>
           <datalist id="sound-options">
             {orderedFiles.map((file) => (
-              <option key={file.name} value={file.name} />
+              <option key={file.name} value={displayName(file.name)} />
             ))}
           </datalist>
         </label>
@@ -128,7 +145,9 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
                   <MusicNotesSimple size={16} weight="fill" />
                 </div>
                 <div className="sound-chip__body">
-                  <strong>{file.name}</strong>
+                  <strong className="sound-name" title={file.name}>
+                    {displayName(file.name)}
+                  </strong>
                   <span className="muted tiny">Editado {new Date(file.modified).toLocaleDateString("es-ES")}</span>
                 </div>
                 {selected === file.name && <CheckCircle size={16} weight="fill" className="accent" />}
@@ -144,7 +163,9 @@ function IntroConfigurator({ files, loading, busy, onSubmit }) {
               <span>Previsualizar</span>
             </div>
             <div className="player-meta horizontal">
-              <span className="muted tiny">{selected}</span>
+              <span className="muted tiny" title={selected}>
+                {displayName(selected)}
+              </span>
             </div>
             <button
               type="button"

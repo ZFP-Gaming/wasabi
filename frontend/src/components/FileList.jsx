@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock,
   FileAudio,
+  MagnifyingGlass,
   NotePencil,
   PauseCircle,
   PlayCircle,
@@ -9,6 +10,7 @@ import {
   WaveSine,
 } from "phosphor-react";
 import { fileUrl } from "../services/api.js";
+import { displayName, ensureExtension } from "../utils/fileNames.js";
 
 const PAGE_SIZE = 9;
 
@@ -44,11 +46,16 @@ function formatTime(seconds) {
 
 function FileCard({ file, onRename, onDelete, disabled }) {
   const [editing, setEditing] = useState(false);
-  const [newName, setNewName] = useState(file.name);
+  const baseName = useMemo(() => displayName(file.name), [file.name]);
+  const [newName, setNewName] = useState(baseName);
   const [localError, setLocalError] = useState("");
   const [playing, setPlaying] = useState(false);
   const audioSource = useMemo(() => fileUrl(file.name), [file.name]);
   const audioRef = useRef(null);
+
+  useEffect(() => {
+    setNewName(baseName);
+  }, [baseName]);
 
   const handleRename = async (event) => {
     event.preventDefault();
@@ -57,17 +64,18 @@ function FileCard({ file, onRename, onDelete, disabled }) {
       setLocalError("Ingresa un nombre válido");
       return;
     }
-    if (newName.trim() === file.name) {
+    const targetName = ensureExtension(newName, file.name);
+    if (targetName === file.name) {
       setEditing(false);
       return;
     }
-    await onRename(file.name, newName.trim());
+    await onRename(file.name, targetName);
     setEditing(false);
   };
 
   const handleDelete = async () => {
     if (disabled) return;
-    const confirmed = window.confirm(`¿Eliminar ${file.name}?`);
+    const confirmed = window.confirm(`¿Eliminar ${baseName}?`);
     if (!confirmed) return;
     await onDelete(file.name);
   };
@@ -91,7 +99,9 @@ function FileCard({ file, onRename, onDelete, disabled }) {
             <FileAudio size={20} weight="fill" />
           </div>
           <div className="file-name-line">
-            <p className="file-name">{file.name}</p>
+            <p className="file-name" title={file.name}>
+              {baseName}
+            </p>
             <div className="file-meta inline">
               <span className="pill subtle compact tiny-pill">
                 <Clock size={14} weight="bold" />
@@ -127,7 +137,7 @@ function FileCard({ file, onRename, onDelete, disabled }) {
             className="ghost"
             onClick={() => {
               setEditing(false);
-              setNewName(file.name);
+              setNewName(baseName);
               setLocalError("");
             }}
           >
@@ -190,6 +200,7 @@ function FileCard({ file, onRename, onDelete, disabled }) {
 
 function FileList({ files, loading, onRename, onDelete, disabled }) {
   const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
   const orderedFiles = useMemo(
     () =>
       [...files].sort(
@@ -197,14 +208,21 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
       ),
     [files],
   );
+  const filteredFiles = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return orderedFiles;
+    return orderedFiles.filter((file) =>
+      displayName(file.name).toLowerCase().includes(term),
+    );
+  }, [orderedFiles, query]);
   const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(orderedFiles.length / PAGE_SIZE)),
-    [orderedFiles.length],
+    () => Math.max(1, Math.ceil(filteredFiles.length / PAGE_SIZE)),
+    [filteredFiles.length],
   );
 
   useEffect(() => {
     setPage(1);
-  }, [orderedFiles.length]);
+  }, [filteredFiles.length]);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -214,11 +232,11 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
 
   const paginatedFiles = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return orderedFiles.slice(start, start + PAGE_SIZE);
-  }, [orderedFiles, page]);
+    return filteredFiles.slice(start, start + PAGE_SIZE);
+  }, [filteredFiles, page]);
 
-  const showingStart = (page - 1) * PAGE_SIZE + 1;
-  const showingEnd = Math.min(page * PAGE_SIZE, orderedFiles.length);
+  const showingStart = filteredFiles.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const showingEnd = Math.min(page * PAGE_SIZE, filteredFiles.length);
 
   if (loading) {
     return (
@@ -230,12 +248,46 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
     );
   }
 
-  if (!orderedFiles.length) {
-    return <p className="muted">No hay archivos en el servidor todavía.</p>;
+  if (!filteredFiles.length) {
+    return (
+      <>
+        <div className="list-toolbar">
+          <div className="input-shell search">
+            <MagnifyingGlass size={18} weight="bold" className="muted" />
+            <input
+              type="search"
+              placeholder="Buscar por nombre…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        </div>
+        <p className="muted">
+          {orderedFiles.length
+            ? "No se encontraron archivos que coincidan con la búsqueda."
+            : "No hay archivos en el servidor todavía."}
+        </p>
+      </>
+    );
   }
 
   return (
     <>
+      <div className="list-toolbar">
+        <div className="input-shell search">
+          <MagnifyingGlass size={18} weight="bold" className="muted" />
+          <input
+            type="search"
+            placeholder="Buscar por nombre…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <span className="pill subtle compact tiny-pill">
+          {filteredFiles.length} coincidencia{filteredFiles.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
       <div className="file-grid">
         {paginatedFiles.map((file) => (
           <FileCard
@@ -249,9 +301,17 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
       </div>
       <div className="pagination">
         <span className="pagination-count">
-          Mostrando {showingStart}–{showingEnd} de {orderedFiles.length}
+          Mostrando {showingStart}–{showingEnd} de {filteredFiles.length}
         </span>
         <div className="pagination-controls">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setPage(1)}
+            disabled={page === 1}
+          >
+            Inicio
+          </button>
           <button
             type="button"
             className="ghost"
@@ -268,6 +328,14 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
             disabled={page === totalPages}
           >
             Siguiente
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setPage(totalPages)}
+            disabled={page === totalPages}
+          >
+            Final
           </button>
         </div>
       </div>
