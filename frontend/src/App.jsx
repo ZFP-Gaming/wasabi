@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowClockwise, Compass, Sliders } from "phosphor-react";
+import { Compass, Sliders } from "phosphor-react";
 import { useAuth } from "./contexts/AuthContext";
 import Login from "./components/Login";
 import UserProfile from "./components/UserProfile";
@@ -166,10 +166,6 @@ function App() {
                       Elige un archivo de audio y opcionalmente define el nombre final.
                     </p>
                   </div>
-                  <button className="ghost" onClick={loadFiles} disabled={loading}>
-                    <ArrowClockwise size={18} weight="bold" />
-                    Recargar lista
-                  </button>
                 </div>
                 <UploadForm onSubmit={handleUpload} busy={busy} />
               </section>

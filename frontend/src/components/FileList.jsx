@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Clock,
   FileAudio,
@@ -9,6 +9,8 @@ import {
   WaveSine,
 } from "phosphor-react";
 import { fileUrl } from "../services/api.js";
+
+const PAGE_SIZE = 9;
 
 function formatSize(bytes) {
   if (!bytes) return "0 B";
@@ -187,6 +189,7 @@ function FileCard({ file, onRename, onDelete, disabled }) {
 }
 
 function FileList({ files, loading, onRename, onDelete, disabled }) {
+  const [page, setPage] = useState(1);
   const orderedFiles = useMemo(
     () =>
       [...files].sort(
@@ -194,6 +197,28 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
       ),
     [files],
   );
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(orderedFiles.length / PAGE_SIZE)),
+    [orderedFiles.length],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [orderedFiles.length]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  const paginatedFiles = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return orderedFiles.slice(start, start + PAGE_SIZE);
+  }, [orderedFiles, page]);
+
+  const showingStart = (page - 1) * PAGE_SIZE + 1;
+  const showingEnd = Math.min(page * PAGE_SIZE, orderedFiles.length);
 
   if (loading) {
     return (
@@ -210,17 +235,43 @@ function FileList({ files, loading, onRename, onDelete, disabled }) {
   }
 
   return (
-    <div className="file-grid">
-      {orderedFiles.map((file) => (
-        <FileCard
-          key={file.name}
-          file={file}
-          onRename={onRename}
-          onDelete={onDelete}
-          disabled={disabled}
-        />
-      ))}
-    </div>
+    <>
+      <div className="file-grid">
+        {paginatedFiles.map((file) => (
+          <FileCard
+            key={file.name}
+            file={file}
+            onRename={onRename}
+            onDelete={onDelete}
+            disabled={disabled}
+          />
+        ))}
+      </div>
+      <div className="pagination">
+        <span className="pagination-count">
+          Mostrando {showingStart}–{showingEnd} de {orderedFiles.length}
+        </span>
+        <div className="pagination-controls">
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Anterior
+          </button>
+          <span className="pill subtle compact">Página {page}</span>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+          >
+            Siguiente
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
