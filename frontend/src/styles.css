@@ -310,6 +310,25 @@ button.primary {
   width: fit-content;
 }
 
+.icon-button {
+  padding: 10px 12px;
+}
+
+.primary-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+}
+
+.primary-circle.small {
+  width: 40px;
+  height: 40px;
+}
+
 .file-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -318,12 +337,12 @@ button.primary {
 }
 
 .file-card {
-  padding: 16px;
+  padding: 12px;
   border-radius: 16px;
   border: 1px solid var(--panel-border);
   background: linear-gradient(170deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .file-header {
@@ -331,6 +350,19 @@ button.primary {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
+}
+
+.file-header.compact {
+  align-items: center;
+  gap: 12px;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .file-id {
@@ -352,6 +384,9 @@ button.primary {
 .file-name {
   margin: 0 0 4px;
   font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file-meta {
@@ -364,9 +399,13 @@ button.primary {
   padding: 6px 10px;
 }
 
+.tiny-pill {
+  font-size: 12px;
+}
+
 .chip-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -439,7 +478,7 @@ button.primary {
 
 .player-shell {
   border-radius: 14px;
-  padding: 12px;
+  padding: 8px 10px;
   background: linear-gradient(140deg, rgba(101, 243, 197, 0.12), rgba(255, 255, 255, 0.03));
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
@@ -459,12 +498,43 @@ button.primary {
   font-weight: 700;
 }
 
-.audio-player {
-  width: 100%;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  accent-color: var(--accent);
+.player-shell.compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-shell.single-line {
+  gap: 12px;
+}
+
+.player-shell.micro {
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.player-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.player-meta.horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-meta.horizontal.micro {
+  gap: 6px;
+}
+
+.sr-audio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
 }
 
 .tiny {
