@@ -1,0 +1,8 @@
+{
+    "apps": [
+        {
+            "name": "wasabi_api",
+            "script": "./wasabi_api_x64"
+        }
+    ]
+}
