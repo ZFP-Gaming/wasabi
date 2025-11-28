@@ -9,3 +9,12 @@ frontend/dist/
 uploads/
 
 dump/
+
+*.DS_Store
+.gopath/
+
+wasabi_api
+
+wasabi_api_arm
+
+wasabi_api_x64
