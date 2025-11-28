@@ -59,3 +59,14 @@ export async function deleteFile(name) {
   });
   return handleResponse(response);
 }
+
+export async function sendIntroRequest(soundName) {
+  const response = await fetchWithCredentials(`${API_BASE}/intro`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ soundName }),
+  });
+  return handleResponse(response);
+}

@@ -33,6 +33,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/upload", s.authRequired(s.uploadHandler))
 	mux.HandleFunc("/files", s.authRequired(s.listHandler))
 	mux.HandleFunc("/files/", s.authRequired(s.fileHandler))
+	mux.HandleFunc("/intro", s.authRequired(s.introHandler))
 
 	return corsMiddleware(s.frontendOrigin, logRequest(mux))
 }

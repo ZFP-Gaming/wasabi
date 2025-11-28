@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowClockwise } from "phosphor-react";
+import { ArrowClockwise, Compass, Sliders } from "phosphor-react";
 import { useAuth } from "./contexts/AuthContext";
 import Login from "./components/Login";
 import UserProfile from "./components/UserProfile";
 import FileList from "./components/FileList.jsx";
 import UploadForm from "./components/UploadForm.jsx";
-import { deleteFile, fetchFiles, renameFile, uploadFile } from "./services/api.js";
+import IntroConfigurator from "./components/IntroConfigurator.jsx";
+import { deleteFile, fetchFiles, renameFile, sendIntroRequest, uploadFile } from "./services/api.js";
 
 function App() {
   const { user, loading: authLoading } = useAuth();
@@ -14,6 +15,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [activeView, setActiveView] = useState("sounds");
 
   const loadFiles = useCallback(async () => {
     setLoading(true);
@@ -82,6 +84,20 @@ function App() {
     }
   };
 
+  const handleIntroRequest = async (soundName) => {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await sendIntroRequest(soundName);
+      setNotice(`Solicitud de intro registrada con ${res.soundName}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (authLoading) {
     return (
       <div className="page loading-page">
@@ -105,52 +121,87 @@ function App() {
         </div>
       </header>
 
-      <div className="alerts">
-        {error && <div className="alert alert-error">{error}</div>}
-        {notice && <div className="alert alert-success">{notice}</div>}
-      </div>
+      <div className="app-shell">
+        <aside className="sidebar">
+          <nav className="nav">
+            <button
+              className={`nav-item ${activeView === "sounds" ? "is-active" : ""}`}
+              onClick={() => setActiveView("sounds")}
+              type="button"
+            >
+              <Sliders size={16} weight="bold" />
+              Administrar sonidos
+            </button>
+            <button
+              className={`nav-item ${activeView === "intro" ? "is-active" : ""}`}
+              onClick={() => setActiveView("intro")}
+              type="button"
+            >
+              <Compass size={16} weight="bold" />
+              Configurar mi intro
+            </button>
+          </nav>
+        </aside>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Subida rápida</h2>
-            <p className="muted">
-              Elige un archivo de audio y opcionalmente define el nombre final.
-            </p>
+        <div className="content-area">
+          <div className="alerts">
+            {error && <div className="alert alert-error">{error}</div>}
+            {notice && <div className="alert alert-success">{notice}</div>}
           </div>
-          <button className="ghost" onClick={loadFiles} disabled={loading}>
-            <ArrowClockwise size={18} weight="bold" />
-            Recargar lista
-          </button>
-        </div>
-        <UploadForm onSubmit={handleUpload} busy={busy} />
-      </section>
 
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Archivos en servidor</h2>
-            <p className="muted">
-              Consulta los archivos guardados en la carpeta <code>uploads</code>
-              .
-            </p>
-          </div>
-          {loading ? (
-            <span className="pill subtle">Cargando...</span>
+          {activeView === "intro" ? (
+            <IntroConfigurator
+              files={files}
+              loading={loading}
+              busy={busy}
+              onSubmit={handleIntroRequest}
+            />
           ) : (
-            <span className="pill subtle">
-              {files.length} archivo{files.length === 1 ? "" : "s"}
-            </span>
+            <>
+              <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Subida rápida</h2>
+                    <p className="muted">
+                      Elige un archivo de audio y opcionalmente define el nombre final.
+                    </p>
+                  </div>
+                  <button className="ghost" onClick={loadFiles} disabled={loading}>
+                    <ArrowClockwise size={18} weight="bold" />
+                    Recargar lista
+                  </button>
+                </div>
+                <UploadForm onSubmit={handleUpload} busy={busy} />
+              </section>
+
+              <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2>Archivos en servidor</h2>
+                    <p className="muted">
+                      Consulta los archivos guardados en la carpeta <code>uploads</code>.
+                    </p>
+                  </div>
+                  {loading ? (
+                    <span className="pill subtle">Cargando...</span>
+                  ) : (
+                    <span className="pill subtle">
+                      {files.length} archivo{files.length === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+                <FileList
+                  files={files}
+                  loading={loading}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                  disabled={busy}
+                />
+              </section>
+            </>
           )}
         </div>
-        <FileList
-          files={files}
-          loading={loading}
-          onRename={handleRename}
-          onDelete={handleDelete}
-          disabled={busy}
-        />
-      </section>
+      </div>
     </div>
   );
 }
