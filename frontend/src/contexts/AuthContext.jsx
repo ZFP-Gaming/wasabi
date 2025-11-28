@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { API_BASE } from "../services/api";
 
 const AuthContext = createContext(null);
 
@@ -13,7 +14,7 @@ export function AuthProvider({ children }) {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch("http://localhost:8080/auth/me", {
+      const response = await fetch(`${API_BASE}/auth/me`, {
         credentials: "include",
       });
 
@@ -32,12 +33,12 @@ export function AuthProvider({ children }) {
   };
 
   const login = () => {
-    window.location.href = "http://localhost:8080/auth/discord";
+    window.location.href = `${API_BASE}/auth/discord`;
   };
 
   const logout = async () => {
     try {
-      await fetch("http://localhost:8080/auth/logout", {
+      await fetch(`${API_BASE}/auth/logout`, {
         method: "POST",
         credentials: "include",
       });

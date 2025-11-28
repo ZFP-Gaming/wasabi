@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowClockwise } from "phosphor-react";
 import { useAuth } from "./contexts/AuthContext";
 import Login from "./components/Login";
@@ -15,19 +15,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
-  if (authLoading) {
-    return (
-      <div className="page loading-page">
-        <div className="loader">Cargando...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Login />;
-  }
-
-  const loadFiles = async () => {
+  const loadFiles = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -38,11 +26,16 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    if (!user) {
+      setFiles([]);
+      setLoading(false);
+      return;
+    }
     loadFiles();
-  }, []);
+  }, [user, loadFiles]);
 
   const handleUpload = async (formData) => {
     setBusy(true);
@@ -88,6 +81,18 @@ function App() {
       setBusy(false);
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="page loading-page">
+        <div className="loader">Cargando...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   return (
     <div className="page">
