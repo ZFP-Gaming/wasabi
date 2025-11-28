@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8080";
 
 async function handleResponse(response) {
   const contentType = response.headers.get("content-type");
@@ -17,8 +17,15 @@ async function handleResponse(response) {
   return payload;
 }
 
+const fetchWithCredentials = (url, options = {}) => {
+  return fetch(url, {
+    ...options,
+    credentials: "include",
+  });
+};
+
 export async function fetchFiles() {
-  const response = await fetch(`${API_BASE}/files`);
+  const response = await fetchWithCredentials(`${API_BASE}/files`);
   const payload = await handleResponse(response);
   return Array.isArray(payload) ? payload : [];
 }
@@ -28,7 +35,7 @@ export function fileUrl(name) {
 }
 
 export async function uploadFile(formData) {
-  const response = await fetch(`${API_BASE}/upload`, {
+  const response = await fetchWithCredentials(`${API_BASE}/upload`, {
     method: "POST",
     body: formData,
   });
@@ -36,7 +43,7 @@ export async function uploadFile(formData) {
 }
 
 export async function renameFile(currentName, newName) {
-  const response = await fetch(`${API_BASE}/files/${encodeURIComponent(currentName)}`, {
+  const response = await fetchWithCredentials(`${API_BASE}/files/${encodeURIComponent(currentName)}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -47,7 +54,7 @@ export async function renameFile(currentName, newName) {
 }
 
 export async function deleteFile(name) {
-  const response = await fetch(`${API_BASE}/files/${encodeURIComponent(name)}`, {
+  const response = await fetchWithCredentials(`${API_BASE}/files/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });
   return handleResponse(response);

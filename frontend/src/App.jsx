@@ -1,15 +1,31 @@
 import { useEffect, useState } from "react";
 import { ArrowClockwise } from "phosphor-react";
+import { useAuth } from "./contexts/AuthContext";
+import Login from "./components/Login";
+import UserProfile from "./components/UserProfile";
 import FileList from "./components/FileList.jsx";
 import UploadForm from "./components/UploadForm.jsx";
 import { deleteFile, fetchFiles, renameFile, uploadFile } from "./services/api.js";
 
 function App() {
+  const { user, loading: authLoading } = useAuth();
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+
+  if (authLoading) {
+    return (
+      <div className="page loading-page">
+        <div className="loader">Cargando...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
 
   const loadFiles = async () => {
     setLoading(true);
@@ -85,9 +101,12 @@ function App() {
             <code>/files</code> vía proxy para evitar CORS.
           </p>
         </div>
-        <div className="pill">
-          <span className="dot" />
-          API en vivo · 8080
+        <div className="hero-actions">
+          <UserProfile />
+          <div className="pill">
+            <span className="dot" />
+            API en vivo · 8080
+          </div>
         </div>
       </header>
 

@@ -2,24 +2,57 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 var uploadDir = "uploads"
+var jwtSecret []byte
+var discordConfig oauth2Config
 
 type config struct {
 	addr      string
 	uploadDir string
 }
+
+type oauth2Config struct {
+	clientID     string
+	clientSecret string
+	redirectURI  string
+}
+
+type discordUser struct {
+	ID            string `json:"id"`
+	Username      string `json:"username"`
+	Discriminator string `json:"discriminator"`
+	Avatar        string `json:"avatar"`
+}
+
+type jwtClaims struct {
+	UserID        string `json:"user_id"`
+	Username      string `json:"username"`
+	Discriminator string `json:"discriminator"`
+	Avatar        string `json:"avatar"`
+	jwt.RegisteredClaims
+}
+
+type contextKey string
+
+const userContextKey contextKey = "user"
 
 type fileEntry struct {
 	Name     string `json:"name"`
@@ -39,17 +72,25 @@ func main() {
 	cfg := readConfig()
 	uploadDir = cfg.uploadDir
 
+	if err := readAuthConfig(); err != nil {
+		log.Fatalf("configuración de autenticación inválida: %v", err)
+	}
+
 	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
 		log.Fatalf("no se pudo crear la carpeta de subida: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/upload", uploadHandler)
-	mux.HandleFunc("/files", listHandler)
-	mux.HandleFunc("/files/", fileHandler)
+	mux.HandleFunc("/auth/discord", authDiscordHandler)
+	mux.HandleFunc("/auth/discord/callback", authCallbackHandler)
+	mux.HandleFunc("/auth/logout", logoutHandler)
+	mux.HandleFunc("/auth/me", authRequired(meHandler))
+	mux.HandleFunc("/upload", authRequired(uploadHandler))
+	mux.HandleFunc("/files", authRequired(listHandler))
+	mux.HandleFunc("/files/", authRequired(fileHandler))
 
 	log.Printf("servidor escuchando en %s, carpeta de subidas: %s", cfg.addr, uploadDir)
-	if err := http.ListenAndServe(cfg.addr, logRequest(mux)); err != nil {
+	if err := http.ListenAndServe(cfg.addr, corsMiddleware(logRequest(mux))); err != nil {
 		log.Fatalf("servidor detenido: %v", err)
 	}
 }
@@ -341,4 +382,300 @@ func logRequest(next http.Handler) http.Handler {
 		log.Printf("%s %s", r.Method, r.URL.Path)
 		next.ServeHTTP(w, r)
 	})
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func readAuthConfig() error {
+	clientID := strings.TrimSpace(os.Getenv("DISCORD_CLIENT_ID"))
+	clientSecret := strings.TrimSpace(os.Getenv("DISCORD_CLIENT_SECRET"))
+	redirectURI := strings.TrimSpace(os.Getenv("DISCORD_REDIRECT_URI"))
+	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+
+	if clientID == "" {
+		return fmt.Errorf("DISCORD_CLIENT_ID es requerido")
+	}
+	if clientSecret == "" {
+		return fmt.Errorf("DISCORD_CLIENT_SECRET es requerido")
+	}
+	if redirectURI == "" {
+		return fmt.Errorf("DISCORD_REDIRECT_URI es requerido")
+	}
+	if secret == "" {
+		return fmt.Errorf("JWT_SECRET es requerido")
+	}
+
+	discordConfig = oauth2Config{
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		redirectURI:  redirectURI,
+	}
+	jwtSecret = []byte(secret)
+
+	log.Printf("configuración de autenticación cargada correctamente")
+	return nil
+}
+
+func authDiscordHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "solo se permite GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	state := generateRandomState()
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "oauth_state",
+		Value:    state,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   300,
+		Path:     "/",
+	})
+
+	authURL := fmt.Sprintf(
+		"https://discord.com/oauth2/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=identify&state=%s",
+		url.QueryEscape(discordConfig.clientID),
+		url.QueryEscape(discordConfig.redirectURI),
+		url.QueryEscape(state),
+	)
+
+	http.Redirect(w, r, authURL, http.StatusTemporaryRedirect)
+}
+
+func authCallbackHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "solo se permite GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	state := r.URL.Query().Get("state")
+	errorParam := r.URL.Query().Get("error")
+
+	if errorParam != "" {
+		http.Redirect(w, r, "http://localhost:5173?error=access_denied", http.StatusTemporaryRedirect)
+		return
+	}
+
+	if code == "" {
+		http.Error(w, "código de autorización requerido", http.StatusBadRequest)
+		return
+	}
+
+	cookie, err := r.Cookie("oauth_state")
+	if err != nil || cookie.Value != state {
+		http.Error(w, "estado inválido - posible ataque CSRF", http.StatusBadRequest)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:   "oauth_state",
+		Value:  "",
+		MaxAge: -1,
+		Path:   "/",
+	})
+
+	accessToken, err := exchangeCodeForToken(code)
+	if err != nil {
+		log.Printf("error al intercambiar código: %v", err)
+		http.Error(w, "error al autenticar con Discord", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := fetchDiscordUser(accessToken)
+	if err != nil {
+		log.Printf("error al obtener usuario: %v", err)
+		http.Error(w, "error al obtener perfil de usuario", http.StatusInternalServerError)
+		return
+	}
+
+	jwtToken, err := generateJWT(user)
+	if err != nil {
+		log.Printf("error al generar JWT: %v", err)
+		http.Error(w, "error al crear sesión", http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "auth_token",
+		Value:    jwtToken,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+		Path:     "/",
+	})
+
+	http.Redirect(w, r, "http://localhost:5173", http.StatusTemporaryRedirect)
+}
+
+func exchangeCodeForToken(code string) (string, error) {
+	data := url.Values{}
+	data.Set("client_id", discordConfig.clientID)
+	data.Set("client_secret", discordConfig.clientSecret)
+	data.Set("grant_type", "authorization_code")
+	data.Set("code", code)
+	data.Set("redirect_uri", discordConfig.redirectURI)
+
+	resp, err := http.PostForm("https://discord.com/api/oauth2/token", data)
+	if err != nil {
+		return "", fmt.Errorf("error en petición: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("código de estado: %d", resp.StatusCode)
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+		TokenType   string `json:"token_type"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("error al decodificar respuesta: %w", err)
+	}
+
+	return result.AccessToken, nil
+}
+
+func fetchDiscordUser(accessToken string) (*discordUser, error) {
+	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me", nil)
+	if err != nil {
+		return nil, fmt.Errorf("error al crear petición: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error en petición: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("código de estado: %d", resp.StatusCode)
+	}
+
+	var user discordUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, fmt.Errorf("error al decodificar usuario: %w", err)
+	}
+
+	return &user, nil
+}
+
+func generateJWT(user *discordUser) (string, error) {
+	claims := jwtClaims{
+		UserID:        user.ID,
+		Username:      user.Username,
+		Discriminator: user.Discriminator,
+		Avatar:        user.Avatar,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(jwtSecret)
+}
+
+func validateJWT(tokenString string) (*jwtClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &jwtClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("método de firma inesperado: %v", token.Header["alg"])
+		}
+		return jwtSecret, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*jwtClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, fmt.Errorf("token inválido")
+}
+
+func authRequired(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		cookie, err := r.Cookie("auth_token")
+		if err != nil {
+			http.Error(w, "no autenticado", http.StatusUnauthorized)
+			return
+		}
+
+		claims, err := validateJWT(cookie.Value)
+		if err != nil {
+			http.Error(w, "token inválido o expirado", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userContextKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "solo se permite POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:   "auth_token",
+		Value:  "",
+		MaxAge: -1,
+		Path:   "/",
+	})
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "sesión cerrada"})
+}
+
+func meHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "solo se permite GET", http.StatusMethodNotAllowed)
+		return
+	}
+
+	claims, ok := r.Context().Value(userContextKey).(*jwtClaims)
+	if !ok {
+		http.Error(w, "no se pudo obtener usuario", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"user_id":       claims.UserID,
+		"username":      claims.Username,
+		"discriminator": claims.Discriminator,
+		"avatar":        claims.Avatar,
+	})
+}
+
+func generateRandomState() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Printf("error al generar estado aleatorio: %v", err)
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return base64.URLEncoding.EncodeToString(b)
 }
