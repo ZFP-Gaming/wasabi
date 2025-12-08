@@ -18,10 +18,11 @@ type appConfig struct {
 }
 
 type authConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURI  string
-	JWTSecret    string
+	ClientID        string
+	ClientSecret    string
+	RedirectURI     string
+	JWTSecret       string
+	RequiredGuildID string
 }
 
 type mongoConfig struct {
@@ -120,6 +121,7 @@ func readAuthConfig() (authConfig, error) {
 	clientSecret := strings.TrimSpace(os.Getenv("DISCORD_CLIENT_SECRET"))
 	redirectURI := strings.TrimSpace(os.Getenv("DISCORD_REDIRECT_URI"))
 	secret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	requiredGuildID := strings.TrimSpace(os.Getenv("DISCORD_REQUIRED_GUILD_ID"))
 
 	if clientID == "" {
 		return authConfig{}, fmt.Errorf("DISCORD_CLIENT_ID es requerido")
@@ -133,12 +135,16 @@ func readAuthConfig() (authConfig, error) {
 	if secret == "" {
 		return authConfig{}, fmt.Errorf("JWT_SECRET es requerido")
 	}
+	if requiredGuildID == "" {
+		return authConfig{}, fmt.Errorf("DISCORD_REQUIRED_GUILD_ID es requerido")
+	}
 
 	return authConfig{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		RedirectURI:  redirectURI,
-		JWTSecret:    secret,
+		ClientID:        clientID,
+		ClientSecret:    clientSecret,
+		RedirectURI:     redirectURI,
+		JWTSecret:       secret,
+		RequiredGuildID: requiredGuildID,
 	}, nil
 }
 

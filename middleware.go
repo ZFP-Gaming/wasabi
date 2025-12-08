@@ -19,6 +19,11 @@ func (s *server) authRequired(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		if s.auth.requiredGuildID != "" && claims.GuildID != s.auth.requiredGuildID {
+			http.Error(w, "debes ser miembro del servidor de Discord para usar Wasabi", http.StatusForbidden)
+			return
+		}
+
 		ctx := contextWithUser(r.Context(), claims)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}

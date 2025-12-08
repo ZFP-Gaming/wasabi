@@ -36,12 +36,14 @@ type jwtClaims struct {
 	Username      string `json:"username"`
 	Discriminator string `json:"discriminator"`
 	Avatar        string `json:"avatar"`
+	GuildID       string `json:"guild_id"`
 	jwt.RegisteredClaims
 }
 
 type authService struct {
-	config    oauth2Config
-	jwtSecret []byte
+	config          oauth2Config
+	jwtSecret       []byte
+	requiredGuildID string
 }
 
 func newAuthService(cfg authConfig) *authService {
@@ -51,15 +53,17 @@ func newAuthService(cfg authConfig) *authService {
 			clientSecret: cfg.ClientSecret,
 			redirectURI:  cfg.RedirectURI,
 		},
-		jwtSecret: []byte(cfg.JWTSecret),
+		jwtSecret:       []byte(cfg.JWTSecret),
+		requiredGuildID: cfg.RequiredGuildID,
 	}
 }
 
 func (a *authService) authURL(state string) string {
 	return fmt.Sprintf(
-		"https://discord.com/oauth2/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=identify&state=%s",
+		"https://discord.com/oauth2/authorize?client_id=%s&redirect_uri=%s&response_type=code&scope=%s&state=%s",
 		url.QueryEscape(a.config.clientID),
 		url.QueryEscape(a.config.redirectURI),
+		url.QueryEscape("identify guilds"),
 		url.QueryEscape(state),
 	)
 }
@@ -120,6 +124,44 @@ func (a *authService) fetchDiscordUser(accessToken string) (*discordUser, error)
 	return &user, nil
 }
 
+func (a *authService) isMemberOfRequiredGuild(accessToken string) (bool, error) {
+	if a.requiredGuildID == "" {
+		return true, nil
+	}
+
+	req, err := http.NewRequest("GET", "https://discord.com/api/users/@me/guilds", nil)
+	if err != nil {
+		return false, fmt.Errorf("error al crear petición: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("error en petición: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("código de estado: %d", resp.StatusCode)
+	}
+
+	var guilds []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&guilds); err != nil {
+		return false, fmt.Errorf("error al decodificar guilds: %w", err)
+	}
+
+	for _, guild := range guilds {
+		if guild.ID == a.requiredGuildID {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (a *authService) generateJWT(user *discordUser) (string, error) {
 	now := time.Now()
 	claims := jwtClaims{
@@ -127,6 +169,7 @@ func (a *authService) generateJWT(user *discordUser) (string, error) {
 		Username:      user.Username,
 		Discriminator: user.Discriminator,
 		Avatar:        user.Avatar,
+		GuildID:       a.requiredGuildID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),

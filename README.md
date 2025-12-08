@@ -34,6 +34,7 @@ Configura las siguientes variables:
 - `DISCORD_CLIENT_ID`: Client ID de tu aplicación Discord
 - `DISCORD_CLIENT_SECRET`: Client Secret de tu aplicación Discord
 - `DISCORD_REDIRECT_URI`: URL de callback (ajusta al puerto del backend, ej: `http://localhost:8080/auth/discord/callback`)
+- `DISCORD_REQUIRED_GUILD_ID`: ID del servidor de Discord cuyo membership es obligatorio para iniciar sesión (configura el ID del guild)
 - `JWT_SECRET`: Clave secreta para firmar tokens JWT (usa una cadena aleatoria larga)
 
 ### Ejecución del backend
@@ -109,5 +110,6 @@ Si tu backend escucha en una URL distinta, crea `frontend/.env` con `VITE_API_BA
 - Los nombres de archivo se sanitizan para prevenir ataques de path traversal
 - Protección CSRF mediante validación de estado OAuth
 - CORS configurado para permitir credenciales desde el frontend
+- Solo los usuarios que pertenecen al servidor de Discord configurado (`DISCORD_REQUIRED_GUILD_ID`) pueden autenticarse y usar los endpoints protegidos
 
 Los nombres se normalizan para evitar rutas peligrosas. Los archivos se guardan en `uploads` (se crea si no existe).

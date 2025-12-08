@@ -74,6 +74,17 @@ func (s *server) authCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isMember, err := s.auth.isMemberOfRequiredGuild(accessToken)
+	if err != nil {
+		log.Printf("error al verificar membresía: %v", err)
+		http.Error(w, "no se pudo verificar membresía del servidor", http.StatusUnauthorized)
+		return
+	}
+	if !isMember {
+		http.Error(w, "debes ser miembro del servidor de Discord para usar Wasabi", http.StatusForbidden)
+		return
+	}
+
 	jwtToken, err := s.auth.generateJWT(user)
 	if err != nil {
 		log.Printf("error al generar JWT: %v", err)
