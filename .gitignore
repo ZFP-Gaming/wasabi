@@ -12,6 +12,7 @@ dump/
 
 *.DS_Store
 .gopath/
+.cache/
 
 wasabi_api
 
