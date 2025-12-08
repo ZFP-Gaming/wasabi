@@ -29,6 +29,8 @@ Configura las siguientes variables:
 
 - `PORT`: puerto/addr de escucha (por defecto `8080`, se puede usar `:8080` o `127.0.0.1:8080`)
 - `UPLOAD_DIR`: carpeta donde se guardan los archivos (por defecto `uploads`)
+- `FRONTEND_ORIGIN`: origen principal del frontend (primer valor si envías varios separados por comas). Se usa para redirecciones OAuth.
+- `ALLOWED_ORIGINS`: lista separada por comas de orígenes permitidos para CORS. Incluye automáticamente `FRONTEND_ORIGIN` (ej: `https://wasabi.zfpgaming.cl,http://localhost:5173`)
 - `DISCORD_CLIENT_ID`: Client ID de tu aplicación Discord
 - `DISCORD_CLIENT_SECRET`: Client Secret de tu aplicación Discord
 - `DISCORD_REDIRECT_URI`: URL de callback (ajusta al puerto del backend, ej: `http://localhost:8080/auth/discord/callback`)

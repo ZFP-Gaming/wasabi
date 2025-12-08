@@ -12,6 +12,7 @@ type appConfig struct {
 	Addr           string
 	UploadDir      string
 	FrontendOrigin string
+	AllowedOrigins []string
 	Auth           authConfig
 	Mongo          mongoConfig
 }
@@ -44,10 +45,11 @@ func loadAppConfig() (appConfig, error) {
 		upload = "uploads"
 	}
 
-	frontend := strings.TrimSpace(os.Getenv("FRONTEND_ORIGIN"))
-	if frontend == "" {
-		frontend = "http://localhost:5173"
+	frontendOrigins := splitOrigins(os.Getenv("FRONTEND_ORIGIN"))
+	if len(frontendOrigins) == 0 {
+		frontendOrigins = []string{"http://localhost:5173"}
 	}
+	frontend := frontendOrigins[0]
 
 	authCfg, err := readAuthConfig()
 	if err != nil {
@@ -63,9 +65,48 @@ func loadAppConfig() (appConfig, error) {
 		Addr:           addr,
 		UploadDir:      upload,
 		FrontendOrigin: frontend,
+		AllowedOrigins: mergeOrigins(frontendOrigins, splitOrigins(os.Getenv("ALLOWED_ORIGINS"))),
 		Auth:           authCfg,
 		Mongo:          mongoCfg,
 	}, nil
+}
+
+func splitOrigins(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		origin := strings.TrimSpace(part)
+		if origin == "" {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins
+}
+
+func mergeOrigins(groups ...[]string) []string {
+	seen := make(map[string]struct{})
+	var merged []string
+
+	for _, group := range groups {
+		for _, origin := range group {
+			if origin == "" {
+				continue
+			}
+			if _, ok := seen[origin]; ok {
+				continue
+			}
+			seen[origin] = struct{}{}
+			merged = append(merged, origin)
+		}
+	}
+
+	return merged
 }
 
 func readAuthConfig() (authConfig, error) {

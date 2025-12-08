@@ -16,6 +16,7 @@ type server struct {
 	uploadDir        string
 	auth             *authService
 	frontendOrigin   string
+	allowedOrigins   []string
 	mongoClient      *mongo.Client
 	introsCollection *mongo.Collection
 }
@@ -37,6 +38,7 @@ func newServer(cfg appConfig) (*server, error) {
 		uploadDir:        cfg.UploadDir,
 		auth:             newAuthService(cfg.Auth),
 		frontendOrigin:   cfg.FrontendOrigin,
+		allowedOrigins:   cfg.AllowedOrigins,
 		mongoClient:      client,
 		introsCollection: client.Database(cfg.Mongo.Database).Collection(cfg.Mongo.Collection),
 	}, nil
@@ -57,7 +59,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("/files/", s.authRequired(s.fileHandler))
 	mux.HandleFunc("/intro", s.authRequired(s.introHandler))
 
-	return corsMiddleware(s.frontendOrigin, logRequest(mux))
+	return corsMiddleware(s.allowedOrigins, logRequest(mux))
 }
 
 func (s *server) listen(addr string) {
