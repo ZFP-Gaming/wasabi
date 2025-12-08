@@ -80,7 +80,7 @@ func splitOrigins(raw string) []string {
 	parts := strings.Split(raw, ",")
 	origins := make([]string, 0, len(parts))
 	for _, part := range parts {
-		origin := strings.TrimSpace(part)
+		origin := normalizeOrigin(part)
 		if origin == "" {
 			continue
 		}
@@ -95,9 +95,7 @@ func mergeOrigins(groups ...[]string) []string {
 
 	for _, group := range groups {
 		for _, origin := range group {
-			if origin == "" {
-				continue
-			}
+			origin = normalizeOrigin(origin)
 			if _, ok := seen[origin]; ok {
 				continue
 			}
@@ -107,6 +105,14 @@ func mergeOrigins(groups ...[]string) []string {
 	}
 
 	return merged
+}
+
+func normalizeOrigin(origin string) string {
+	origin = strings.TrimSpace(origin)
+	for strings.HasSuffix(origin, "/") {
+		origin = strings.TrimSuffix(origin, "/")
+	}
+	return origin
 }
 
 func readAuthConfig() (authConfig, error) {
